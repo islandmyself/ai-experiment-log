@@ -107,6 +107,21 @@
     padding: 9px 10px; font-size: 13px; border: 1px solid var(--border);
     border-radius: 8px; background: var(--bg); color: var(--text); min-width: 130px;
   }
+  .mic-btn {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 50%;
+    width: 40px; height: 40px; font-size: 17px; cursor: pointer; color: var(--text);
+    flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+    transition: background .15s;
+  }
+  .mic-btn:hover { border-color: var(--primary); }
+  .mic-btn.recording {
+    background: var(--danger); border-color: var(--danger); color: #fff;
+    animation: pulse 1.2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,.45); }
+    50% { box-shadow: 0 0 0 9px rgba(220,38,38,0); }
+  }
   .quick-hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
 
   /* 按钮 */
@@ -272,19 +287,17 @@
 <div class="quick">
   <div class="quick-row">
     <input type="text" id="qAction" placeholder="AI 帮我干了什么？回车直接保存…" autocomplete="off">
-    <select id="qStage">
-      <option>写listing/标题</option><option>客服</option><option>做图</option>
-      <option>选品</option><option>广告分析</option><option>数据分析</option>
-      <option>效率工具</option><option>AI学习</option><option>其他</option>
-    </select>
+    <button class="mic-btn" id="micBtn" onclick="toggleMic()" title="语音输入">🎤</button>
+    <input type="text" id="qStage" list="stageList" placeholder="环节(可输入或选)" autocomplete="off">
     <input type="text" class="tool" id="qTool" placeholder="工具(可选)" autocomplete="off">
     <button class="btn btn-primary" onclick="quickSave()">记下</button>
   </div>
-  <div class="quick-hint" id="quickHint">回车快速保存 · 需要耗时/结果/打分？点「＋ 记一条」写详细</div>
+  <div class="quick-hint" id="quickHint">🎤 点麦克风直接说 · 回车快速保存 · 需要耗时/结果/打分？点「＋ 记一条」写详细</div>
 </div>
 
 <div class="btn-row">
   <button class="btn btn-ghost" onclick="openForm()">📝 记详细</button>
+  <button class="btn btn-ghost" onclick="openText()">📋 贴文字转记录</button>
   <button class="btn btn-ghost" onclick="exportMarkdown()">⬇ 导出本周 Markdown</button>
   <button class="btn btn-ghost" onclick="exportJSON()">💾 备份 JSON</button>
   <button class="btn btn-ghost" onclick="importJSON()">📥 导入备份</button>
@@ -329,17 +342,7 @@
     </div>
     <div class="field">
       <label>工作环节</label>
-      <select id="fStage">
-        <option value="写listing/标题">写listing/标题</option>
-        <option value="客服">客服</option>
-        <option value="做图">做图</option>
-        <option value="选品">选品</option>
-        <option value="广告分析">广告分析</option>
-        <option value="数据分析">数据分析</option>
-        <option value="效率工具">效率工具</option>
-        <option value="AI学习">AI学习</option>
-        <option value="其他">其他</option>
-      </select>
+      <input type="text" id="fStage" list="stageList" placeholder="可输入或选择,如:翻译差评 / 整理退货报告" autocomplete="off">
     </div>
     <div class="field">
       <label>用了什么 AI 工具</label>
@@ -386,8 +389,37 @@
   </div>
 </div>
 
+<!-- 贴文字转记录 -->
+<div class="modal-mask" id="textMask" onclick="if(event.target===this)closeText()">
+  <div class="modal">
+    <h2>📋 贴文字转记录</h2>
+    <div class="field">
+      <label>在别处写的想法/记录(微信、备忘录、随手打的…)</label>
+      <textarea id="rawText" style="min-height:150px" placeholder="粘贴你的文字…&#10;例:早上让Claude帮我重写了三个listing,花30分钟,人工要2小时。点击率提升12%。翻车点:AI编了个不存在的功能,要核对。"></textarea>
+    </div>
+    <div class="hint" style="margin-top:-6px">自动识别:环节 / 工具 / 耗时 / 结果数据 / 心得 — 识别结果会预填到表单,你确认后保存</div>
+    <div class="modal-ops">
+      <button class="btn btn-ghost" onclick="closeText()">取消</button>
+      <button class="btn btn-primary" onclick="runExtract()">识别并生成记录</button>
+    </div>
+  </div>
+</div>
+
 <button class="fab" onclick="openForm()" title="记一条">＋</button>
 <div class="toast" id="toast"></div>
+
+<!-- 环节常用项(可输入也可选) -->
+<datalist id="stageList">
+  <option value="写listing/标题"></option>
+  <option value="客服"></option>
+  <option value="做图"></option>
+  <option value="选品"></option>
+  <option value="广告分析"></option>
+  <option value="数据分析"></option>
+  <option value="效率工具"></option>
+  <option value="AI学习"></option>
+  <option value="其他"></option>
+</datalist>
 
 <script>
 const KEY = 'aiStoreExperiments';
@@ -530,7 +562,10 @@ function renderBoard() {
   const wk = records.filter(r => r.date >= week);
   // 环节分布
   const byStage = {};
-  wk.forEach(r => { byStage[r.stage || '其他'] = (byStage[r.stage || '其他'] || 0) + 1; });
+  wk.forEach(r => {
+    const s = (r.stage || '').trim() || '其他';
+    byStage[s] = (byStage[s] || 0) + 1;
+  });
   const max = Math.max(1, ...Object.values(byStage));
   document.getElementById('stageChart').innerHTML = Object.entries(byStage)
     .sort((a,b) => b[1]-a[1])
@@ -613,7 +648,7 @@ function render() {
 function quickSave() {
   const action = document.getElementById('qAction').value.trim();
   if (!action) { toast('先写下 AI 帮你干了什么'); document.getElementById('qAction').focus(); return; }
-  const stage = document.getElementById('qStage').value;
+  const stage = document.getElementById('qStage').value.trim() || '其他';
   const tool = document.getElementById('qTool').value.trim();
   records.push({
     id: 'r' + Date.now() + Math.floor(Math.random()*1000),
@@ -625,6 +660,75 @@ function quickSave() {
   document.getElementById('qTool').value = '';
   save();
   toast('已记下 ✅ 连续记录天数在增长');
+}
+
+/* ---------- 语音输入 (Web Speech API) ---------- */
+let mic = null;          // SpeechRecognition 实例
+let micActive = false;   // 是否在录音
+let micOrig = '';        // 录音前输入框原有内容
+let micFinal = '';       // 已确认的识别文字
+
+function micSupported() {
+  // file:// 或非安全上下文下语音不可用,提前拦截
+  if (location.protocol === 'file:' || location.protocol !== 'https:' && location.protocol !== 'http:') return false;
+  return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+}
+function updateMicUI() {
+  const btn = document.getElementById('micBtn');
+  btn.classList.toggle('recording', micActive);
+  btn.textContent = micActive ? '⏹' : '🎤';
+}
+function toggleMic() {
+  if (!micSupported()) {
+    toast('语音输入需要 HTTPS 环境,请使用在线版(或换 Chrome/Edge/手机浏览器)');
+    return;
+  }
+  if (micActive) { mic && mic.stop(); return; }   // 再点一次 = 手动结束
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  try { mic = new SR(); } catch { toast('语音识别初始化失败'); return; }
+  mic.lang = 'zh-CN';
+  mic.interimResults = true;   // 边说边上屏
+  mic.continuous = false;      // 停顿即结束,简单可靠
+  micFinal = '';
+  mic.onstart = () => {
+    micOrig = document.getElementById('qAction').value;
+    micActive = true;
+    updateMicUI();
+  };
+  mic.onresult = e => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) micFinal += t;
+      else interim += t;
+    }
+    document.getElementById('qAction').value = micFinal + interim;
+  };
+  mic.onerror = e => {
+    micActive = false;
+    updateMicUI();
+    const msgs = {
+      'not-allowed': '麦克风权限被拒绝:请在浏览器设置里允许本网页使用麦克风',
+      'service-not-allowed': '语音服务不可用,换个浏览器试试',
+      'no-speech': '没听到声音,请对着麦克风说话',
+      'network': '语音服务连不上网络,稍后再试',
+      'audio-capture': '没有检测到麦克风设备',
+      'aborted': '',
+    };
+    if (msgs[e.error]) toast(msgs[e.error]);
+  };
+  mic.onend = () => {
+    micActive = false;
+    updateMicUI();
+    const input = document.getElementById('qAction');
+    if (micFinal) {
+      input.value = micOrig.trim() ? micOrig.trim() + ' ' + micFinal : micFinal;
+      toast('识别完成,可修改后回车保存');
+      input.focus();
+    }
+  };
+  mic.start();
+  toast('🎤 正在听,说话吧(说完自动停,或再点一次手动结束)');
 }
 
 /* ---------- 详情表单 ---------- */
@@ -684,7 +788,7 @@ function saveRecord() {
   const data = {
     id: id || 'r' + Date.now() + Math.floor(Math.random()*1000),
     date: document.getElementById('fDate').value || today(),
-    stage: document.getElementById('fStage').value,
+    stage: document.getElementById('fStage').value.trim() || '其他',
     tool: document.getElementById('fTool').value.trim(),
     action: action,
     manual: document.getElementById('fManual').value,
@@ -712,9 +816,117 @@ function delRecord(id) {
   toast('已删除');
 }
 
+/* ---------- 贴文字转记录 (规则提取) ---------- */
+const TOOL_LIB = [
+  ['Claude', /claude/i],
+  ['ChatGPT', /chatgpt|chat gpt/i],
+  ['豆包', /豆包/],
+  ['Kimi', /kimi/i],
+  ['DeepSeek', /deepseek/i],
+  ['Gemini', /gemini/i],
+  ['文心一言', /文心/],
+  ['通义千问', /通义/],
+  ['Copilot', /copilot/i],
+  ['Midjourney', /midjourney/i],
+  ['Canva', /canva/i],
+  ['剪映/CapCut', /剪映|capcut/i],
+  ['即梦', /即梦/],
+  ['可灵', /可灵/],
+  ['Notion AI', /notion/i],
+  ['腾讯元宝', /元宝/],
+  ['钉钉AI', /钉钉/],
+  ['其他AI工具', /ai助手|ai工具/],
+];
+const STAGE_RULES = [
+  { stage: '写listing/标题', kws: [/listing/i, /五点/, /标题/, /关键词/, /bullet/i, /商品描述/, /文案/] },
+  { stage: '客服', kws: [/客服/, /买家/, /客户/, /回复/, /差评/, /退货纠纷/, /退款/, /纠纷/, /售后/] },
+  { stage: '做图', kws: [/做图/, /作图/, /海报/, /主图/, /详情页/, /banner/i, /修图/, /配图/] },
+  { stage: '选品', kws: [/选品/, /竞品/, /调研/, /选款/] },
+  { stage: '广告分析', kws: [/广告/, /投放/, /roas/i, /cpc/i, /竞价/] },
+  { stage: '数据分析', kws: [/数据/, /报表/, /excel/i, /表格/] },
+  { stage: '效率工具', kws: [/效率/, /自动化/, /工作流/, /批量/, /脚本/, /流程/, /整理/] },
+  { stage: 'AI学习', kws: [/学习/, /教程/, /课程/, /prompt/i, /提示词/, /入门/] },
+];
+const LESSON_KW = ['翻车', '教训', '踩坑', '注意', '发现', '不行', '错误', '问题', 'bug', '总结', '心得', '失误', '警惕', '小心', '坑'];
+const RESULT_KW = ['点击率', '转化', '曝光', '收藏', '销量', '提升', '下降', '涨', '降', 'roas', 'ctr', '数据', '效果', '评论', '询盘'];
+
+function splitSents(text) {
+  return text.split(/[。!！?？\n;；]+/).map(s => s.trim()).filter(Boolean);
+}
+function numKey(s) {
+  const m = s.match(/(\d+(?:\.\d+)?)\s*(小时|分钟|min|h)/i);
+  return m ? m[1] + m[2].toLowerCase() : null;
+}
+function pickTimes(text) {
+  // 优先:明确指向「人工 X」和「AI X」的耗时
+  const mMan = text.match(/人工(?:约|大概|要|花?了|用了)?\s*(\d+(?:\.\d+)?)\s*(小时|分钟|min|h)/i);
+  const mAi = text.match(/(?:AI|助手|它)(?:约|大概|花?了|用了|只要)?\s*(\d+(?:\.\d+)?)\s*(小时|分钟|min|h)/i);
+  if (mMan && mAi) return { manual: mMan[0], ai: mAi[0] };
+  // 无明确指向:拿剩下的数字+单位(排除已被人工/AI 消费的)
+  const all = text.match(/(\d+(?:\.\d+)?)\s*(小时|分钟|min|h)/gi) || [];
+  const used = new Set();
+  if (mMan) used.add(numKey(mMan[0]));
+  if (mAi) used.add(numKey(mAi[0]));
+  const rest = all.filter(x => !used.has(numKey(x)));
+  if (mMan) return { manual: mMan[0], ai: rest[0] || '' };
+  if (mAi) return { manual: rest[0] || '', ai: mAi[0] };
+  // 都没指向:两个数字按出现顺序猜(前人工后AI),单个默认记 AI 耗时
+  if (rest.length >= 2) return { manual: rest[0], ai: rest[1] };
+  if (rest.length === 1) return { manual: '', ai: rest[0] };
+  return { manual: '', ai: '' };
+}
+function pickResult(text) {
+  const sents = splitSents(text);
+  return sents.find(s => RESULT_KW.some(k => s.toLowerCase().includes(k)) && /\d/.test(s)) || '';
+}
+function pickLesson(text) {
+  const hits = splitSents(text).filter(s => LESSON_KW.some(k => s.toLowerCase().includes(k)));
+  return hits.join(';');
+}
+function pickAction(text) {
+  const sents = splitSents(text);
+  if (!sents.length) return text.trim().slice(0, 60);
+  const core = sents.find(s => s.length >= 8) || sents[0];
+  return core.length > 60 ? core.slice(0, 60) + '…' : core;
+}
+function extractRecord(text) {
+  const r = { stage: '', tool: '', action: '', manual: '', ai: '', result: '', lesson: '' };
+  for (const [name, re] of TOOL_LIB) { if (re.test(text)) { r.tool = name; break; } }
+  for (const rule of STAGE_RULES) { if (rule.kws.some(k => k.test(text))) { r.stage = rule.stage; break; } }
+  if (!r.stage) r.stage = '其他';
+  const t = pickTimes(text);
+  r.manual = t.manual; r.ai = t.ai;
+  r.result = pickResult(text);
+  r.lesson = pickLesson(text);
+  r.action = pickAction(text);
+  return r;
+}
+
+function openText() {
+  document.getElementById('rawText').value = '';
+  document.getElementById('textMask').classList.add('show');
+  setTimeout(() => document.getElementById('rawText').focus(), 60);
+}
+function closeText() { document.getElementById('textMask').classList.remove('show'); }
+function runExtract() {
+  const text = document.getElementById('rawText').value.trim();
+  if (!text) { toast('先粘贴文字'); return; }
+  const r = extractRecord(text);
+  closeText();
+  openForm('');
+  document.getElementById('fStage').value = r.stage;
+  document.getElementById('fTool').value = r.tool;
+  document.getElementById('fAction').value = r.action;
+  document.getElementById('fManual').value = r.manual;
+  document.getElementById('fAi').value = r.ai;
+  document.getElementById('fResult').value = r.result;
+  document.getElementById('fLesson').value = r.lesson;
+  toast('已自动提取,确认无误后保存');
+}
+
 /* ---------- 键盘 ---------- */
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeForm(); return; }
+  if (e.key === 'Escape') { closeForm(); closeText(); return; }
   const modal = document.getElementById('modalMask');
   if (modal.classList.contains('show') && (e.ctrlKey || e.metaKey) && e.key === 'Enter') {
     e.preventDefault(); saveRecord();
