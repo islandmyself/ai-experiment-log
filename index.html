@@ -429,7 +429,14 @@ const PROMPTS = [
 
 /* ---------- 基础 ---------- */
 function load() {
-  try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; }
+  try {
+    const arr = JSON.parse(localStorage.getItem(KEY)) || [];
+    // 清洗 id(导入/手改数据可能带引号,防 onclick 属性注入);空则重新生成
+    return arr.map(r => ({
+      ...r,
+      id: String(r.id || '').replace(/[^A-Za-z0-9_:-]/g, '') || 'r' + Date.now() + Math.floor(Math.random()*1000),
+    }));
+  } catch { return []; }
 }
 function save() {
   localStorage.setItem(KEY, JSON.stringify(records));
@@ -478,7 +485,8 @@ function calcStreak() {
   const days = new Set(records.map(r => r.date));
   let streak = 0;
   const d = new Date();
-  if (days.has(today())) { streak = 1; d.setDate(d.getDate() - 1); }
+  if (days.has(fmtDate(d))) { streak = 1; d.setDate(d.getDate() - 1); }
+  else d.setDate(d.getDate() - 1);   // 今天没记:从昨天起算(昨天有记录则连续=1,提示「今天还没记」)
   while (days.has(fmtDate(d))) { streak++; d.setDate(d.getDate() - 1); }
   return streak;
 }
@@ -559,7 +567,7 @@ function renderBoard() {
   }
   document.getElementById('weekChart').innerHTML = weekHtml;
   // 素材候选
-  const mats = records.filter(r => r.material).sort((a,b) => b.date.localeCompare(a.date)).slice(0, 10);
+  const mats = records.filter(r => r.material).sort((a,b) => String(b.date).localeCompare(String(a.date))).slice(0, 10);
   document.getElementById('materialList').innerHTML = mats.length
     ? mats.map(r => `<li><a onclick="openForm('${r.id}')">${esc(r.date)}：${esc(r.action)}</a></li>`).join('')
     : '<li class="detail">勾选了「可做素材」的记录会出现在这里</li>';
@@ -569,7 +577,7 @@ function renderBoard() {
 function render() {
   // 列表
   const list = document.getElementById('list');
-  const sorted = [...records].sort((a,b) => b.date.localeCompare(a.date));
+  const sorted = [...records].sort((a,b) => String(b.date).localeCompare(String(a.date)));
   if (!sorted.length) {
     list.innerHTML = '<div class="empty">还没有记录。<br>今天让 AI 干了什么活？上面输入框直接写，回车保存。</div>';
   } else {
@@ -735,7 +743,7 @@ const TOOL_LIB = [
   ['Notion AI', /notion/i],
   ['腾讯元宝', /元宝/],
   ['钉钉AI', /钉钉/],
-  ['其他AI工具', /ai助手|ai工具/],
+  ['其他AI工具', /ai\s*助手|ai\s*工具/i],
 ];
 const LESSON_KW = ['翻车', '教训', '踩坑', '注意', '发现', '不行', '错误', '问题', 'bug', '总结', '心得', '失误', '警惕', '小心', '坑'];
 const RESULT_KW = ['点击率', '转化', '曝光', '收藏', '销量', '提升', '下降', '涨', '降', 'roas', 'ctr', '数据', '效果', '评论', '询盘'];
@@ -748,21 +756,22 @@ function numKey(s) {
   return m ? m[1] + m[2].toLowerCase() : null;
 }
 function pickTimes(text) {
-  // 优先:明确指向「人工 X」和「AI X」的耗时
-  const mMan = text.match(/人工(?:约|大概|要|花?了|用了)?\s*(\d+(?:\.\d+)?)\s*(小时|分钟|min|h)/i);
-  const mAi = text.match(/(?:AI|助手|它)(?:约|大概|花?了|用了|只要)?\s*(\d+(?:\.\d+)?)\s*(小时|分钟|min|h)/i);
-  if (mMan && mAi) return { manual: mMan[0], ai: mAi[0] };
+  const num = s => (s.match(/\d+(?:\.\d+)?/) || [''])[0];   // 提取纯数字,适配 number 输入框
+  // 优先:明确指向「人工 X」和「AI X」的耗时(关键词后 15 字内找数字+单位)
+  const mMan = text.match(/人工[^。!！?？\n;；]{0,15}?(\d+(?:\.\d+)?)\s*(小时|分钟|min|h)/i);
+  const mAi = text.match(/(?:AI|助手|它)[^。!！?？\n;；]{0,15}?(\d+(?:\.\d+)?)\s*(小时|分钟|min|h)/i);
+  if (mMan && mAi) return { manual: num(mMan[0]), ai: num(mAi[0]) };
   // 无明确指向:拿剩下的数字+单位(排除已被人工/AI 消费的)
   const all = text.match(/(\d+(?:\.\d+)?)\s*(小时|分钟|min|h)/gi) || [];
   const used = new Set();
   if (mMan) used.add(numKey(mMan[0]));
   if (mAi) used.add(numKey(mAi[0]));
   const rest = all.filter(x => !used.has(numKey(x)));
-  if (mMan) return { manual: mMan[0], ai: rest[0] || '' };
-  if (mAi) return { manual: rest[0] || '', ai: mAi[0] };
+  if (mMan) return { manual: num(mMan[0]), ai: rest[0] ? num(rest[0]) : '' };
+  if (mAi) return { manual: rest[0] ? num(rest[0]) : '', ai: num(mAi[0]) };
   // 都没指向:两个数字按出现顺序猜(前人工后AI),单个默认记 AI 耗时
-  if (rest.length >= 2) return { manual: rest[0], ai: rest[1] };
-  if (rest.length === 1) return { manual: '', ai: rest[0] };
+  if (rest.length >= 2) return { manual: num(rest[0]), ai: num(rest[1]) };
+  if (rest.length === 1) return { manual: '', ai: num(rest[0]) };
   return { manual: '', ai: '' };
 }
 function pickResult(text) {
@@ -803,7 +812,7 @@ function closeText() { document.getElementById('textMask').classList.remove('sho
 
 /* ---------- 可做素材列表 ---------- */
 function openMaterials() {
-  const mats = records.filter(r => r.material).sort((a,b) => b.date.localeCompare(a.date));
+  const mats = records.filter(r => r.material).sort((a,b) => String(b.date).localeCompare(String(a.date)));
   const box = document.getElementById('materialBox');
   if (!mats.length) {
     box.innerHTML = '<div class="empty" style="padding:24px 0">还没有素材记录<br>记录时勾选「这篇可以当发帖素材」,或从「贴文字转记录」生成会自动标记</div>';
@@ -864,7 +873,7 @@ function mdLine(r) {
 
 function exportMarkdown() {
   const week = weekStart();
-  const wk = records.filter(r => r.date >= week).sort((a,b) => a.date.localeCompare(b.date));
+  const wk = records.filter(r => r.date >= week).sort((a,b) => String(a.date).localeCompare(String(b.date)));
   if (!wk.length) { toast('本周还没有记录'); return; }
   const savedMin = wk.reduce((s,r) => s + ((+r.manual||0) - (+r.ai||0)), 0);
   const materials = wk.filter(r => r.material).length;
@@ -896,12 +905,16 @@ function mergeImport(incoming) {
   });
   let added = 0, dup = 0;
   incoming.forEach(r => {
-    const idKey = r.id ? 'i:' + r.id : null;
-    const dKey = 'd:' + r.date + '|' + r.action;
+    const safe = {
+      ...r,
+      id: String(r.id || '').replace(/[^A-Za-z0-9_:-]/g, '') || 'r' + Date.now() + Math.floor(Math.random()*1000),
+    };
+    const idKey = safe.id ? 'i:' + safe.id : null;
+    const dKey = 'd:' + safe.date + '|' + safe.action;
     if ((idKey && keys.has(idKey)) || keys.has(dKey)) { dup++; return; }
     if (idKey) keys.add(idKey);
     keys.add(dKey);
-    records.push(r);
+    records.push(safe);
     added++;
   });
   return { added, dup };
