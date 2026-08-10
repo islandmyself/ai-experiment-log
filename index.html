@@ -283,7 +283,6 @@
 <div class="quick">
   <div class="quick-row">
     <input type="text" id="qAction" placeholder="随手记点什么,回车保存…" autocomplete="off">
-    <input type="text" id="qStage" placeholder="分类(自定)" autocomplete="off">
     <input type="text" class="tool" id="qTool" placeholder="工具(可选)" autocomplete="off">
     <button class="btn btn-primary" onclick="quickSave()">记下</button>
   </div>
@@ -310,10 +309,6 @@
   <div class="board-head" onclick="toggleBoard()">📊 数据看板 <span class="arrow">▶</span></div>
   <div class="board-body">
     <div class="board-section">
-      <h3>记录最多的分类（本周）</h3>
-      <div id="stageChart"></div>
-    </div>
-    <div class="board-section">
       <h3>最近 7 天记录数</h3>
       <div class="week-chart" id="weekChart"></div>
     </div>
@@ -334,10 +329,6 @@
     <div class="field">
       <label>日期</label>
       <input type="date" id="fDate">
-    </div>
-    <div class="field">
-      <label>分类</label>
-      <input type="text" id="fStage" placeholder="自己定,如:写listing / 翻译差评 / 灵感 / 生活" autocomplete="off">
     </div>
     <div class="field">
       <label>用了什么 AI 工具</label>
@@ -415,7 +406,6 @@
 <script>
 const KEY = 'aiStoreExperiments';
 const THEME_KEY = 'aiTheme';
-const LAST_STAGE = 'aiLastStage';
 let records = load();
 let starScore = 0;
 let pickScore = 0;
@@ -551,19 +541,6 @@ function toggleBoard() { document.getElementById('board').classList.toggle('open
 function renderBoard() {
   const week = weekStart();
   const wk = records.filter(r => r.date >= week);
-  // 环节分布
-  const byStage = {};
-  wk.forEach(r => {
-    const s = (r.stage || '').trim() || '其他';
-    byStage[s] = (byStage[s] || 0) + 1;
-  });
-  const max = Math.max(1, ...Object.values(byStage));
-  document.getElementById('stageChart').innerHTML = Object.entries(byStage)
-    .sort((a,b) => b[1]-a[1])
-    .map(([s,n]) => `
-      <div class="bar-row"><div class="bar-label">${esc(s)}</div>
-      <div class="bar-track"><div class="bar-fill" style="width:${(n/max*100)}%"></div></div>
-      <div class="bar-num">${n}</div></div>`).join('') || '<div class="detail">本周还没有记录</div>';
   // 最近7天
   const labels = ['一','二','三','四','五','六','日'];
   let weekHtml = '';
@@ -578,7 +555,7 @@ function renderBoard() {
   // 素材候选
   const mats = records.filter(r => r.material).sort((a,b) => b.date.localeCompare(a.date)).slice(0, 10);
   document.getElementById('materialList').innerHTML = mats.length
-    ? mats.map(r => `<li><a onclick="openForm('${r.id}')">${esc(r.date)}｜${esc(r.stage)}：${esc(r.action)}</a></li>`).join('')
+    ? mats.map(r => `<li><a onclick="openForm('${r.id}')">${esc(r.date)}：${esc(r.action)}</a></li>`).join('')
     : '<li class="detail">勾选了「可做素材」的记录会出现在这里</li>';
 }
 
@@ -601,7 +578,6 @@ function render() {
       <div class="card">
         <div class="meta">
           <span class="date">${esc(r.date)}</span>
-          <span class="tag">${esc(r.stage || '其他')}</span>
           ${r.tool ? `<span class="tag tool">${esc(r.tool)}</span>` : ''}
           ${material}
           ${score}
@@ -638,15 +614,13 @@ function render() {
 /* ---------- 快记 ---------- */
 function quickSave() {
   const action = document.getElementById('qAction').value.trim();
-  if (!action) { toast('先写下 AI 帮你干了什么'); document.getElementById('qAction').focus(); return; }
-  const stage = document.getElementById('qStage').value.trim() || '其他';
+  if (!action) { toast('先写下要记的内容'); document.getElementById('qAction').focus(); return; }
   const tool = document.getElementById('qTool').value.trim();
   records.push({
     id: 'r' + Date.now() + Math.floor(Math.random()*1000),
-    date: today(), stage, tool, action,
+    date: today(), tool, action,
     manual: '', ai: '', result: '', lesson: '', material: false, score: 0,
   });
-  localStorage.setItem(LAST_STAGE, stage);
   document.getElementById('qAction').value = '';
   document.getElementById('qTool').value = '';
   save();
@@ -658,7 +632,6 @@ function openForm(id) {
   document.getElementById('formTitle').textContent = id ? '编辑记录' : '记一条';
   document.getElementById('fId').value = id || '';
   document.getElementById('fDate').value = today();
-  document.getElementById('fStage').value = localStorage.getItem(LAST_STAGE) || '';
   document.getElementById('fTool').value = '';
   document.getElementById('fAction').value = '';
   document.getElementById('fManual').value = '';
@@ -672,7 +645,6 @@ function openForm(id) {
     const r = records.find(x => x.id === id);
     if (r) {
       document.getElementById('fDate').value = r.date;
-      document.getElementById('fStage').value = r.stage || '其他';
       document.getElementById('fTool').value = r.tool || '';
       document.getElementById('fAction').value = r.action || '';
       document.getElementById('fManual').value = r.manual ?? '';
@@ -710,7 +682,6 @@ function saveRecord() {
   const data = {
     id: id || 'r' + Date.now() + Math.floor(Math.random()*1000),
     date: document.getElementById('fDate').value || today(),
-    stage: document.getElementById('fStage').value.trim() || '其他',
     tool: document.getElementById('fTool').value.trim(),
     action: action,
     manual: document.getElementById('fManual').value,
@@ -720,7 +691,6 @@ function saveRecord() {
     material: document.getElementById('fMaterial').checked,
     score: pickScore,
   };
-  localStorage.setItem(LAST_STAGE, data.stage);
   if (id) {
     const i = records.findIndex(x => x.id === id);
     if (i >= 0) records[i] = data;
@@ -758,16 +728,6 @@ const TOOL_LIB = [
   ['腾讯元宝', /元宝/],
   ['钉钉AI', /钉钉/],
   ['其他AI工具', /ai助手|ai工具/],
-];
-const STAGE_RULES = [
-  { stage: '写listing/标题', kws: [/listing/i, /五点/, /标题/, /关键词/, /bullet/i, /商品描述/, /文案/] },
-  { stage: '客服', kws: [/客服/, /买家/, /客户/, /回复/, /差评/, /退货纠纷/, /退款/, /纠纷/, /售后/] },
-  { stage: '做图', kws: [/做图/, /作图/, /海报/, /主图/, /详情页/, /banner/i, /修图/, /配图/] },
-  { stage: '选品', kws: [/选品/, /竞品/, /调研/, /选款/] },
-  { stage: '广告分析', kws: [/广告/, /投放/, /roas/i, /cpc/i, /竞价/] },
-  { stage: '数据分析', kws: [/数据/, /报表/, /excel/i, /表格/] },
-  { stage: '效率工具', kws: [/效率/, /自动化/, /工作流/, /批量/, /脚本/, /流程/, /整理/] },
-  { stage: 'AI学习', kws: [/学习/, /教程/, /课程/, /prompt/i, /提示词/, /入门/] },
 ];
 const LESSON_KW = ['翻车', '教训', '踩坑', '注意', '发现', '不行', '错误', '问题', 'bug', '总结', '心得', '失误', '警惕', '小心', '坑'];
 const RESULT_KW = ['点击率', '转化', '曝光', '收藏', '销量', '提升', '下降', '涨', '降', 'roas', 'ctr', '数据', '效果', '评论', '询盘'];
@@ -812,10 +772,8 @@ function pickAction(text) {
   return core.length > 60 ? core.slice(0, 60) + '…' : core;
 }
 function extractRecord(text) {
-  const r = { stage: '', tool: '', action: '', manual: '', ai: '', result: '', lesson: '' };
+  const r = { tool: '', action: '', manual: '', ai: '', result: '', lesson: '' };
   for (const [name, re] of TOOL_LIB) { if (re.test(text)) { r.tool = name; break; } }
-  for (const rule of STAGE_RULES) { if (rule.kws.some(k => k.test(text))) { r.stage = rule.stage; break; } }
-  if (!r.stage) r.stage = '其他';
   const t = pickTimes(text);
   r.manual = t.manual; r.ai = t.ai;
   r.result = pickResult(text);
@@ -840,7 +798,7 @@ function openMaterials() {
   } else {
     box.innerHTML = mats.map(r => `
       <div class="material-item" onclick="openForm('${r.id}')">
-        <div class="m-date">${esc(r.date)} · ${esc((r.stage || '').trim() || '未分类')}</div>
+        <div class="m-date">${esc(r.date)}</div>
         <div class="m-action">${esc(r.action)}</div>
         ${r.result ? `<div class="m-result">📊 ${esc(r.result)}</div>` : ''}
       </div>`).join('');
@@ -854,7 +812,6 @@ function runExtract() {
   const r = extractRecord(text);
   closeText();
   openForm('');
-  document.getElementById('fStage').value = r.stage;
   document.getElementById('fTool').value = r.tool;
   document.getElementById('fAction').value = r.action;
   document.getElementById('fManual').value = r.manual;
@@ -881,7 +838,7 @@ document.getElementById('qAction').addEventListener('keydown', e => {
 /* ---------- 导出 ---------- */
 function mdLine(r) {
   const lines = [];
-  lines.push(`### ${r.date}｜${r.stage}`);
+  lines.push(`### ${r.date}`);
   if (r.tool) lines.push(`- **工具**：${r.tool}`);
   lines.push(`- **干了什么**：${r.action}`);
   if (r.manual !== '' && r.ai !== '') lines.push(`- **耗时**：人工约 ${r.manual} 分钟 → AI ${r.ai} 分钟`);
@@ -907,7 +864,7 @@ function exportMarkdown() {
   const m = wk.filter(r => r.material);
   if (m.length) {
     md += `## 可做素材的候选\n\n`;
-    m.forEach(r => { md += `- ${r.date}｜${r.stage}：${r.action}${r.result ? '（' + r.result + '）' : ''}\n`; });
+    m.forEach(r => { md += `- ${r.date}：${r.action}${r.result ? '（' + r.result + '）' : ''}\n`; });
   }
   download('本周AI实验记录.md', md);
   toast('已导出 Markdown');
