@@ -19,9 +19,14 @@
 
 ## 🚀 使用
 
-1. 下载 `experiment-log.html`,双击浏览器打开即用
+1. 下载 `index.html`,双击浏览器打开即用
 2. 无需安装、无网络依赖、零依赖纯原生 HTML+JS
 3. 数据存在浏览器 localStorage,**不会上传到任何服务器**
+
+### 在线版
+
+GitHub Pages 托管,手机/电脑浏览器直接打开(可"添加到主屏幕"当 App):
+**https://islandmyself.github.io/ai-experiment-log/**
 
 ### 跨设备使用
 
