@@ -775,9 +775,13 @@ function pickLesson(text) {
 }
 function pickAction(text) {
   const sents = splitSents(text);
-  if (!sents.length) return text.trim().slice(0, 60);
+  if (!sents.length) return text.trim().replace(/\s+/g, ' ').slice(0, 200);
   const core = sents.find(s => s.length >= 8) || sents[0];
-  return core.length > 60 ? core.slice(0, 60) + '…' : core;
+  const c = core.replace(/\s+/g, ' ');
+  if (c.length <= 200) return c;
+  const cut = c.slice(0, 200);
+  const i = Math.max(cut.lastIndexOf('，'), cut.lastIndexOf(','), cut.lastIndexOf('、'));
+  return (i > 20 ? cut.slice(0, i) : cut) + '…';
 }
 function extractRecord(text) {
   const r = { tool: '', action: '', manual: '', ai: '', result: '', lesson: '' };
