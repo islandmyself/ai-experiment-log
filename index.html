@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI 店铺实验记录</title>
+<title>AI 实验随手记</title>
 <style>
   :root {
     --bg: #f5f6f8;
@@ -91,6 +91,17 @@
   }
   .stat .num { font-size: 20px; font-weight: 700; }
   .stat .label { font-size: 12px; color: var(--muted); }
+  .stat.clickable { cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+  .stat.clickable:hover { border-color: var(--primary); box-shadow: 0 2px 8px rgba(47,111,237,.15); }
+  .material-box { max-height: 55vh; overflow-y: auto; }
+  .material-item {
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer;
+    background: var(--bg);
+  }
+  .material-item:hover { border-color: var(--primary); }
+  .material-item .m-date { font-size: 11px; color: var(--muted); }
+  .material-item .m-action { font-size: 14px; font-weight: 600; margin: 2px 0; }
+  .material-item .m-result { font-size: 12px; color: var(--muted); }
 
   /* 快记区 */
   .quick {
@@ -106,21 +117,6 @@
   .quick select, .quick input[type="text"].tool {
     padding: 9px 10px; font-size: 13px; border: 1px solid var(--border);
     border-radius: 8px; background: var(--bg); color: var(--text); min-width: 130px;
-  }
-  .mic-btn {
-    background: var(--bg); border: 1px solid var(--border); border-radius: 50%;
-    width: 40px; height: 40px; font-size: 17px; cursor: pointer; color: var(--text);
-    flex-shrink: 0; display: flex; align-items: center; justify-content: center;
-    transition: background .15s;
-  }
-  .mic-btn:hover { border-color: var(--primary); }
-  .mic-btn.recording {
-    background: var(--danger); border-color: var(--danger); color: #fff;
-    animation: pulse 1.2s infinite;
-  }
-  @keyframes pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,.45); }
-    50% { box-shadow: 0 0 0 9px rgba(220,38,38,0); }
   }
   .quick-hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
 
@@ -260,10 +256,10 @@
 <body>
 
 <header>
-  <h1>🤖 AI 店铺实验记录</h1>
+  <h1>✏️ AI 实验随手记</h1>
   <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()">🌙 暗色</button>
 </header>
-<div class="subtitle">每天 2 分钟，记录 AI 帮你干的活。周末一键导出，就是帖子素材。</div>
+<div class="subtitle">随手记下想法、灵感和 AI 实验。周末一键导出，就是内容素材。</div>
 
 <!-- streak + 徽章 -->
 <div class="streak-bar">
@@ -277,22 +273,21 @@
 
 <!-- 统计条 -->
 <div class="stats">
-  <div class="stat"><div class="num" id="statTotal">0</div><div class="label">累计实验</div></div>
+  <div class="stat"><div class="num" id="statTotal">0</div><div class="label">累计记录</div></div>
   <div class="stat"><div class="num" id="statWeek">0</div><div class="label">本周记录</div></div>
   <div class="stat"><div class="num" id="statSaved">0</div><div class="label">AI 省时(分钟)</div></div>
-  <div class="stat"><div class="num" id="statMaterials">0</div><div class="label">可做素材</div></div>
+  <div class="stat clickable" onclick="openMaterials()" title="查看所有可做素材的记录"><div class="num" id="statMaterials">0</div><div class="label">可做素材</div></div>
 </div>
 
 <!-- 快记区 -->
 <div class="quick">
   <div class="quick-row">
-    <input type="text" id="qAction" placeholder="AI 帮我干了什么？回车直接保存…" autocomplete="off">
-    <button class="mic-btn" id="micBtn" onclick="toggleMic()" title="语音输入">🎤</button>
-    <input type="text" id="qStage" list="stageList" placeholder="环节(可输入或选)" autocomplete="off">
+    <input type="text" id="qAction" placeholder="随手记点什么,回车保存…" autocomplete="off">
+    <input type="text" id="qStage" placeholder="分类(自定)" autocomplete="off">
     <input type="text" class="tool" id="qTool" placeholder="工具(可选)" autocomplete="off">
     <button class="btn btn-primary" onclick="quickSave()">记下</button>
   </div>
-  <div class="quick-hint" id="quickHint">🎤 点麦克风直接说 · 回车快速保存 · 需要耗时/结果/打分？点「＋ 记一条」写详细</div>
+  <div class="quick-hint" id="quickHint">回车快速保存 · 需要耗时/结果/打分？点「＋ 记一条」写详细</div>
 </div>
 
 <div class="btn-row">
@@ -315,7 +310,7 @@
   <div class="board-head" onclick="toggleBoard()">📊 数据看板 <span class="arrow">▶</span></div>
   <div class="board-body">
     <div class="board-section">
-      <h3>AI 用得最多的环节（本周）</h3>
+      <h3>记录最多的分类（本周）</h3>
       <div id="stageChart"></div>
     </div>
     <div class="board-section">
@@ -341,8 +336,8 @@
       <input type="date" id="fDate">
     </div>
     <div class="field">
-      <label>工作环节</label>
-      <input type="text" id="fStage" list="stageList" placeholder="可输入或选择,如:翻译差评 / 整理退货报告" autocomplete="off">
+      <label>分类</label>
+      <input type="text" id="fStage" placeholder="自己定,如:写listing / 翻译差评 / 灵感 / 生活" autocomplete="off">
     </div>
     <div class="field">
       <label>用了什么 AI 工具</label>
@@ -405,21 +400,17 @@
   </div>
 </div>
 
+<!-- 可做素材列表 -->
+<div class="modal-mask" id="materialMask" onclick="if(event.target===this)closeMaterials()">
+  <div class="modal">
+    <h2>📌 可做素材的记录</h2>
+    <div class="material-box" id="materialBox"></div>
+    <div class="modal-ops"><button class="btn btn-ghost" onclick="closeMaterials()">关闭</button></div>
+  </div>
+</div>
+
 <button class="fab" onclick="openForm()" title="记一条">＋</button>
 <div class="toast" id="toast"></div>
-
-<!-- 环节常用项(可输入也可选) -->
-<datalist id="stageList">
-  <option value="写listing/标题"></option>
-  <option value="客服"></option>
-  <option value="做图"></option>
-  <option value="选品"></option>
-  <option value="广告分析"></option>
-  <option value="数据分析"></option>
-  <option value="效率工具"></option>
-  <option value="AI学习"></option>
-  <option value="其他"></option>
-</datalist>
 
 <script>
 const KEY = 'aiStoreExperiments';
@@ -432,12 +423,12 @@ let pickScore = 0;
 const STAGES = ['写listing/标题','客服','做图','选品','广告分析','数据分析','效率工具','AI学习','其他'];
 
 const PROMPTS = [
-  ['今天 AI 帮你干了什么？', '哪怕只是一件小事，记下来就是素材。'],
+  ['今天有什么值得记的？', '哪怕很小的一件事，写下来就是素材。'],
   ['今天有翻车现场吗？', '翻车记录往往比成功故事更有人看。'],
-  ['哪件活被 AI 干得最漂亮？', '记得记下它花了多久、省了多少时间。'],
-  ['有没有某件事，AI 根本搞不定？', '这也是发现，写下来才知道边界在哪。'],
-  ['今天 AI 帮你省了多少钱或时间？', '有数字的记录，导出就是一篇帖子的骨架。'],
-  ['记录一下工具名', '用的是什么 AI 工具？下次还用它吗？'],
+  ['今天 AI 帮你干了什么？', '记得记下它花了多久、省了多少时间。'],
+  ['有什么一闪而过的灵感？', '想法不记下来，明天就忘了。'],
+  ['今天哪个瞬间最有感触？', '有细节的记录，导出就是一篇帖子的骨架。'],
+  ['有没有发现什么规律或问题？', '工作中的观察，往往是最好用的干货。'],
 ];
 
 /* ---------- 基础 ---------- */
@@ -662,81 +653,12 @@ function quickSave() {
   toast('已记下 ✅ 连续记录天数在增长');
 }
 
-/* ---------- 语音输入 (Web Speech API) ---------- */
-let mic = null;          // SpeechRecognition 实例
-let micActive = false;   // 是否在录音
-let micOrig = '';        // 录音前输入框原有内容
-let micFinal = '';       // 已确认的识别文字
-
-function micSupported() {
-  // file:// 或非安全上下文下语音不可用,提前拦截
-  if (location.protocol === 'file:' || location.protocol !== 'https:' && location.protocol !== 'http:') return false;
-  return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
-}
-function updateMicUI() {
-  const btn = document.getElementById('micBtn');
-  btn.classList.toggle('recording', micActive);
-  btn.textContent = micActive ? '⏹' : '🎤';
-}
-function toggleMic() {
-  if (!micSupported()) {
-    toast('语音输入需要 HTTPS 环境,请使用在线版(或换 Chrome/Edge/手机浏览器)');
-    return;
-  }
-  if (micActive) { mic && mic.stop(); return; }   // 再点一次 = 手动结束
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  try { mic = new SR(); } catch { toast('语音识别初始化失败'); return; }
-  mic.lang = 'zh-CN';
-  mic.interimResults = true;   // 边说边上屏
-  mic.continuous = false;      // 停顿即结束,简单可靠
-  micFinal = '';
-  mic.onstart = () => {
-    micOrig = document.getElementById('qAction').value;
-    micActive = true;
-    updateMicUI();
-  };
-  mic.onresult = e => {
-    let interim = '';
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      const t = e.results[i][0].transcript;
-      if (e.results[i].isFinal) micFinal += t;
-      else interim += t;
-    }
-    document.getElementById('qAction').value = micFinal + interim;
-  };
-  mic.onerror = e => {
-    micActive = false;
-    updateMicUI();
-    const msgs = {
-      'not-allowed': '麦克风权限被拒绝:请在浏览器设置里允许本网页使用麦克风',
-      'service-not-allowed': '语音服务不可用,换个浏览器试试',
-      'no-speech': '没听到声音,请对着麦克风说话',
-      'network': '语音服务连不上网络,稍后再试',
-      'audio-capture': '没有检测到麦克风设备',
-      'aborted': '',
-    };
-    if (msgs[e.error]) toast(msgs[e.error]);
-  };
-  mic.onend = () => {
-    micActive = false;
-    updateMicUI();
-    const input = document.getElementById('qAction');
-    if (micFinal) {
-      input.value = micOrig.trim() ? micOrig.trim() + ' ' + micFinal : micFinal;
-      toast('识别完成,可修改后回车保存');
-      input.focus();
-    }
-  };
-  mic.start();
-  toast('🎤 正在听,说话吧(说完自动停,或再点一次手动结束)');
-}
-
 /* ---------- 详情表单 ---------- */
 function openForm(id) {
-  document.getElementById('formTitle').textContent = id ? '编辑记录' : '记一条实验';
+  document.getElementById('formTitle').textContent = id ? '编辑记录' : '记一条';
   document.getElementById('fId').value = id || '';
   document.getElementById('fDate').value = today();
-  document.getElementById('fStage').value = localStorage.getItem(LAST_STAGE) || '写listing/标题';
+  document.getElementById('fStage').value = localStorage.getItem(LAST_STAGE) || '';
   document.getElementById('fTool').value = '';
   document.getElementById('fAction').value = '';
   document.getElementById('fManual').value = '';
@@ -908,6 +830,24 @@ function openText() {
   setTimeout(() => document.getElementById('rawText').focus(), 60);
 }
 function closeText() { document.getElementById('textMask').classList.remove('show'); }
+
+/* ---------- 可做素材列表 ---------- */
+function openMaterials() {
+  const mats = records.filter(r => r.material).sort((a,b) => b.date.localeCompare(a.date));
+  const box = document.getElementById('materialBox');
+  if (!mats.length) {
+    box.innerHTML = '<div class="empty" style="padding:24px 0">还没有素材记录<br>记录时勾选「这篇可以当发帖素材」,或从「贴文字转记录」生成会自动标记</div>';
+  } else {
+    box.innerHTML = mats.map(r => `
+      <div class="material-item" onclick="openForm('${r.id}')">
+        <div class="m-date">${esc(r.date)} · ${esc((r.stage || '').trim() || '未分类')}</div>
+        <div class="m-action">${esc(r.action)}</div>
+        ${r.result ? `<div class="m-result">📊 ${esc(r.result)}</div>` : ''}
+      </div>`).join('');
+  }
+  document.getElementById('materialMask').classList.add('show');
+}
+function closeMaterials() { document.getElementById('materialMask').classList.remove('show'); }
 function runExtract() {
   const text = document.getElementById('rawText').value.trim();
   if (!text) { toast('先粘贴文字'); return; }
@@ -921,12 +861,13 @@ function runExtract() {
   document.getElementById('fAi').value = r.ai;
   document.getElementById('fResult').value = r.result;
   document.getElementById('fLesson').value = r.lesson;
-  toast('已自动提取,确认无误后保存');
+  document.getElementById('fMaterial').checked = true;   // 识别生成的默认标记为可做素材,可取消
+  toast('已自动提取,并标记为可做素材(可取消)');
 }
 
 /* ---------- 键盘 ---------- */
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeForm(); closeText(); return; }
+  if (e.key === 'Escape') { closeForm(); closeText(); closeMaterials(); return; }
   const modal = document.getElementById('modalMask');
   if (modal.classList.contains('show') && (e.ctrlKey || e.metaKey) && e.key === 'Enter') {
     e.preventDefault(); saveRecord();
@@ -960,8 +901,8 @@ function exportMarkdown() {
   const materials = wk.filter(r => r.material).length;
   const avgScore = wk.filter(r => r.score).length
     ? (wk.reduce((s,r) => s + (r.score||0), 0) / wk.filter(r => r.score).length).toFixed(1) : '—';
-  let md = `# 本周 AI 店铺实验记录\n\n`;
-  md += `> 本周实验 ${wk.length} 条 · AI 预计省时 ${savedMin} 分钟 · 可做素材 ${materials} 条 · AI 平均表现 ${avgScore} 星\n\n`;
+  let md = `# 本周记录\n\n`;
+  md += `> 本周记录 ${wk.length} 条 · 省时约 ${savedMin} 分钟 · 可做素材 ${materials} 条 · 平均表现 ${avgScore} 星\n\n`;
   wk.forEach(r => { md += mdLine(r); });
   const m = wk.filter(r => r.material);
   if (m.length) {
