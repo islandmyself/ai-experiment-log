@@ -119,6 +119,11 @@
     border-radius: 8px; background: var(--bg); color: var(--text); min-width: 130px;
   }
   .quick-hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
+  .quick label.mat {
+    display: inline-flex; align-items: center; gap: 4px; padding: 0 2px;
+    font-size: 13px; color: var(--muted); cursor: pointer; user-select: none; white-space: nowrap;
+  }
+  .quick label.mat input { accent-color: var(--primary); cursor: pointer; }
 
   /* 按钮 */
   .btn {
@@ -284,6 +289,7 @@
   <div class="quick-row">
     <input type="text" id="qAction" placeholder="随手记点什么,回车保存…" autocomplete="off">
     <input type="text" class="tool" id="qTool" placeholder="工具(可选)" autocomplete="off">
+    <label class="mat" title="勾选后这条记录进入「可做素材」"><input type="checkbox" id="qMaterial">可做素材</label>
     <button class="btn btn-primary" onclick="quickSave()">记下</button>
   </div>
   <div class="quick-hint" id="quickHint">回车快速保存 · 需要耗时/结果/打分？点「＋ 记一条」写详细</div>
@@ -616,15 +622,17 @@ function quickSave() {
   const action = document.getElementById('qAction').value.trim();
   if (!action) { toast('先写下要记的内容'); document.getElementById('qAction').focus(); return; }
   const tool = document.getElementById('qTool').value.trim();
+  const material = document.getElementById('qMaterial').checked;
   records.push({
     id: 'r' + Date.now() + Math.floor(Math.random()*1000),
     date: today(), tool, action,
-    manual: '', ai: '', result: '', lesson: '', material: false, score: 0,
+    manual: '', ai: '', result: '', lesson: '', material, score: 0,
   });
   document.getElementById('qAction').value = '';
   document.getElementById('qTool').value = '';
+  document.getElementById('qMaterial').checked = false;
   save();
-  toast('已记下 ✅ 连续记录天数在增长');
+  toast(material ? '已记下 ✅ 已标记为可做素材' : '已记下 ✅ 连续记录天数在增长');
 }
 
 /* ---------- 详情表单 ---------- */
