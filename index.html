@@ -579,10 +579,14 @@ function renderHeat() {
     html = `<div class="heat-grid7">${cells.join('')}</div>`;
     sub = `近 7 天 · ${active} 天有记录`;
   } else {
-    // 近 1 个月:7 列 × 5 行扁平格铺满,未来日期渲染透明占位格保持对齐
-    const start = new Date();
-    start.setDate(start.getDate() - 34);
-    start.setDate(start.getDate() - ((start.getDay() + 6) % 7)); // 对齐周一
+    // 近 1 个月:7 列 × 5 行扁平格铺满。窗口 = 今天所在周往前 4 个完整周,
+    // 保证今天一定在窗口内(若按「34天前对齐周一」,今天是周中时窗口会停在
+    // 上周日,漏掉最近 1~6 天的记录!),未来日期渲染透明占位格保持对齐
+    const monday = new Date();
+    monday.setHours(0, 0, 0, 0);
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7)); // 今天所在周的周一
+    const start = new Date(monday);
+    start.setDate(start.getDate() - 28);
     const todayD = new Date();
     const seen = new Set();
     const cells = [];
