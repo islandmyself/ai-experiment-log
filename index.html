@@ -228,6 +228,8 @@
     font-size: 14px; font-family: inherit; background: var(--bg); color: var(--text);
   }
   .field textarea { min-height: 72px; resize: vertical; }
+  .field { overflow-x: auto; }  /* 内容超宽时可横向滚动(配合 input 宽度自适应) */
+  .field input[type="text"] { min-width: 100%; field-sizing: content; }  /* 文本框宽度随内容自适应,不支持的浏览器回退固定宽 */
   .field-row { display: flex; gap: 10px; }
   .field-row .field { flex: 1; }
   .check-row { display: flex; align-items: center; gap: 8px; font-size: 14px; }
@@ -656,6 +658,14 @@ function quickSave() {
 }
 
 /* ---------- 详情表单 ---------- */
+function autoGrow(el) {   // 文字区自适应高度:打开/输入时自动长到内容完整显示
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
+['fAction', 'fLesson', 'rawText'].forEach(id => {
+  document.getElementById(id).addEventListener('input', e => autoGrow(e.target));
+});
+
 function openForm(id) {
   document.getElementById('formTitle').textContent = id ? '编辑记录' : '记一条';
   document.getElementById('fId').value = id || '';
@@ -685,6 +695,9 @@ function openForm(id) {
     }
   }
   document.getElementById('modalMask').classList.add('show');
+  // 打开后把长文字区自动长到内容完整显示(需先显示,display:none 时 scrollHeight 为 0)
+  autoGrow(document.getElementById('fAction'));
+  autoGrow(document.getElementById('fLesson'));
   // 不做自动聚焦:用户要求打开弹窗只是展示(自动聚焦在手机上会弹键盘)
 }
 function closeForm() { document.getElementById('modalMask').classList.remove('show'); }
