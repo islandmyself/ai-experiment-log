@@ -685,7 +685,7 @@ function openForm(id) {
     }
   }
   document.getElementById('modalMask').classList.add('show');
-  setTimeout(() => document.getElementById('fAction').focus(), 60);
+  // 不做自动聚焦:用户要求打开弹窗只是展示(自动聚焦在手机上会弹键盘)
 }
 function closeForm() { document.getElementById('modalMask').classList.remove('show'); }
 
