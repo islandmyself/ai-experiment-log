@@ -142,10 +142,21 @@
 
   /* 热力图 */
   .heatmap-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 14px; }
-  .heatmap-title { font-size: 13px; font-weight: 700; margin-bottom: 10px; display: flex; justify-content: space-between; }
+  .heatmap-title { font-size: 13px; font-weight: 700; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
   .heatmap-title .sub { font-size: 11px; color: var(--muted); font-weight: 400; }
+  .heat-range { display: inline-flex; gap: 4px; }
+  .heat-btn {
+    font-size: 11px; padding: 2px 8px; border-radius: 999px; font-family: inherit; cursor: pointer;
+    border: 1px solid var(--border); background: var(--card); color: var(--muted);
+  }
+  .heat-btn.active { background: var(--tag-bg); color: var(--tag-text); border-color: var(--primary); font-weight: 600; }
   .heat-wrap { overflow-x: auto; padding-bottom: 4px; }
   .heat { display: flex; gap: 3px; min-width: 740px; }
+  .heat-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+  .heat-d7 { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .heat-d7 .cell { width: 18px; height: 18px; }
+  .heat-d7 .cell.today { outline: 2px solid var(--primary); outline-offset: 1px; }
+  .heat-dow { font-size: 11px; color: var(--muted); }
   .heat-col { display: flex; flex-direction: column; gap: 3px; }
   .heat-col .m-label { height: 12px; font-size: 9px; color: var(--muted); margin-bottom: 2px; }
   .cell {
@@ -308,7 +319,15 @@
 
 <!-- 热力图 -->
 <div class="heatmap-card">
-  <div class="heatmap-title">记录热力图 <span class="sub" id="heatSub"></span></div>
+  <div class="heatmap-title">记录热力图
+    <span style="display:inline-flex;align-items:center;gap:8px">
+      <span class="heat-range">
+        <button class="heat-btn active" data-range="7d" onclick="setHeatRange('7d')">7天</button>
+        <button class="heat-btn" data-range="1m" onclick="setHeatRange('1m')">1个月</button>
+      </span>
+      <span class="sub" id="heatSub"></span>
+    </span>
+  </div>
   <div class="heat-wrap"><div class="heat" id="heat"></div></div>
   <div class="heat-legend">少 <span class="cell"></span><span class="cell l1"></span><span class="cell l2"></span><span class="cell l3"></span><span class="cell l4"></span> 多</div>
 </div>
@@ -521,45 +540,64 @@ function renderPrompt() {
   document.getElementById('prompt').innerHTML = `💬 <b>${q}</b> <span style="color:var(--muted)">${hint}</span>`;
 }
 
-/* ---------- 热力图 ---------- */
+/* ---------- 热力图 (7天 / 1个月 切换) ---------- */
+let heatRange = localStorage.getItem('aiHeatRange') || '7d';
+
+function setHeatRange(r) {
+  heatRange = r;
+  localStorage.setItem('aiHeatRange', r);
+  renderHeat();
+}
+
 function renderHeat() {
+  document.querySelectorAll('.heat-btn').forEach(b => b.classList.toggle('active', b.dataset.range === heatRange));
   const byDate = {};
-  records.forEach(r => {
-    byDate[r.date] = (byDate[r.date] || 0) + 1;
-  });
-  const todayD = new Date();
-  const start = new Date(todayD);
-  start.setDate(start.getDate() - 6 * 7);
-  start.setDate(start.getDate() - ((start.getDay() + 6) % 7)); // 对齐周一
-  const cols = [];
-  const monthNames = ['1','2','3','4','5','6','7','8','9','10','11','12'];
-  for (let i = 0; i < 53; i++) {
-    const col = { cells: [], mLabel: '' };
-    for (let j = 0; j < 7; j++) {
-      const dt = new Date(start);
-      dt.setDate(start.getDate() + i * 7 + j);
-      if (j === 0 && dt.getMonth() !== new Date(start).getMonth()) col.mLabel = '';
+  records.forEach(r => { byDate[r.date] = (byDate[r.date] || 0) + 1; });
+  const lv = c => (c > 3 ? 4 : c);
+  const el = document.getElementById('heat');
+  let html = '', sub = '';
+
+  if (heatRange === '7d') {
+    // 最近 7 天:一行 7 格,带星期标注,今天高亮
+    const dow = ['日','一','二','三','四','五','六'];
+    let active = 0;
+    const cells = [];
+    for (let i = 6; i >= 0; i--) {
+      const dt = new Date(); dt.setDate(dt.getDate() - i);
       const key = fmtDate(dt);
       const c = byDate[key] || 0;
-      col.cells.push({ key, c, level: c > 3 ? 4 : c });
+      if (c) active++;
+      const isToday = i === 0;
+      cells.push(`<div class="heat-d7">
+        <div class="cell${lv(c) ? ' l' + lv(c) : ''}${isToday ? ' today' : ''}" title="${key}：${c} 条记录"></div>
+        <div class="heat-dow">${dow[dt.getDay()]}${isToday ? '(今)' : ''}</div>
+      </div>`);
     }
-    // 月份标签：该列第一天与上一列第一天不同月则标记
-    const first = new Date(start); first.setDate(start.getDate() + i * 7);
-    const prev = new Date(start); prev.setDate(start.getDate() + (i - 1) * 7);
-    col.mLabel = (i === 0 || first.getMonth() !== prev.getMonth()) ? monthNames[first.getMonth()] : '';
-    cols.push(col);
+    html = `<div class="heat-row">${cells.join('')}</div>`;
+    sub = `近 7 天 · ${active} 天有记录`;
+  } else {
+    // 近 1 个月:5 列 × 7 天(35 天窗口,对齐周一,不画未来格)
+    const start = new Date();
+    start.setDate(start.getDate() - 34);
+    start.setDate(start.getDate() - ((start.getDay() + 6) % 7)); // 对齐周一
+    const todayD = new Date();
+    const seen = new Set();
+    for (let i = 0; i < 5; i++) {
+      let col = '<div class="heat-col">';
+      for (let j = 0; j < 7; j++) {
+        const dt = new Date(start); dt.setDate(start.getDate() + i * 7 + j);
+        if (dt > todayD) break;   // 不渲染未来
+        const key = fmtDate(dt);
+        const c = byDate[key] || 0;
+        if (c) seen.add(key);
+        col += `<div class="cell${lv(c) ? ' l' + lv(c) : ''}" title="${key}：${c} 条记录"></div>`;
+      }
+      html += col + '</div>';
+    }
+    sub = `近 1 个月 · ${seen.size} 天有记录`;
   }
-  let html = '';
-  cols.forEach(col => {
-    html += '<div class="heat-col"><div class="m-label">' + col.mLabel + '</div>';
-    col.cells.forEach(c => {
-      html += `<div class="cell${c.level ? ' l' + c.level : ''}" title="${c.key}：${c.c} 条记录"></div>`;
-    });
-    html += '</div>';
-  });
-  document.getElementById('heat').innerHTML = html;
-  const totalDays = new Set(records.map(r => r.date)).size;
-  document.getElementById('heatSub').textContent = `近 53 周 · ${totalDays} 天有记录`;
+  el.innerHTML = html;
+  document.getElementById('heatSub').textContent = sub;
 }
 
 /* ---------- 看板 ---------- */
