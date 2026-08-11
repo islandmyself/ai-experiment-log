@@ -215,6 +215,7 @@
     z-index: 100; overflow-y: auto;
   }
   .modal-mask.show { display: block; }
+  #modalMask { z-index: 101; }  /* 编辑表单永远浮在素材列表/贴文字之上,防遮挡 */
   .modal {
     background: var(--card); border-radius: 16px; max-width: 600px;
     margin: 40px auto; padding: 20px;
@@ -412,6 +413,8 @@
 <script>
 const KEY = 'aiStoreExperiments';
 const THEME_KEY = 'aiTheme';
+let idSeq = 0;   // 必须在 records = load() 之前初始化:清洗缺 id/重复 id 时 load 会调用 genId,let 的 TDZ 会抛 ReferenceError 被 catch 吞掉导致数据全空
+function genId() { return 'r' + Date.now() + '-' + (idSeq++); }  // 会话内计数器保证唯一,防同毫秒碰撞
 let records = load();
 let starScore = 0;
 let pickScore = 0;
@@ -428,14 +431,22 @@ const PROMPTS = [
 ];
 
 /* ---------- 基础 ---------- */
+// 统一数据清洗:过滤脏元素、id 消毒(防 onclick 属性注入)、重复 id 重新生成(防误编辑误删)
+function sanitizeRecords(arr) {
+  const seen = new Set();
+  const out = [];
+  (Array.isArray(arr) ? arr : []).forEach(r => {
+    if (!r || typeof r !== 'object' || Array.isArray(r)) return;
+    let id = String(r.id || '').replace(/[^A-Za-z0-9_:-]/g, '') || genId();
+    if (seen.has(id)) id = genId();  // 清洗塌缩/同毫秒碰撞的重复 id
+    seen.add(id);
+    out.push({ ...r, id });
+  });
+  return out;
+}
 function load() {
   try {
-    const arr = JSON.parse(localStorage.getItem(KEY)) || [];
-    // 清洗 id(导入/手改数据可能带引号,防 onclick 属性注入);空则重新生成
-    return arr.map(r => ({
-      ...r,
-      id: String(r.id || '').replace(/[^A-Za-z0-9_:-]/g, '') || 'r' + Date.now() + Math.floor(Math.random()*1000),
-    }));
+    return sanitizeRecords(JSON.parse(localStorage.getItem(KEY)) || []);
   } catch { return []; }
 }
 function save() {
@@ -623,6 +634,7 @@ function render() {
   renderBadges(streak);
   renderHeat();
   renderBoard();
+  renderMaterials();
 }
 
 /* ---------- 快记 ---------- */
@@ -632,7 +644,7 @@ function quickSave() {
   const tool = document.getElementById('qTool').value.trim();
   const material = document.getElementById('qMaterial').checked;
   records.push({
-    id: 'r' + Date.now() + Math.floor(Math.random()*1000),
+    id: genId(),
     date: today(), tool, action,
     manual: '', ai: '', result: '', lesson: '', material, score: 0,
   });
@@ -696,7 +708,7 @@ function saveRecord() {
   if (!action) { toast('「我让它干了什么」不能为空'); return; }
   const id = document.getElementById('fId').value;
   const data = {
-    id: id || 'r' + Date.now() + Math.floor(Math.random()*1000),
+    id: id || genId(),
     date: document.getElementById('fDate').value || today(),
     tool: document.getElementById('fTool').value.trim(),
     action: action,
@@ -811,19 +823,19 @@ function openText() {
 function closeText() { document.getElementById('textMask').classList.remove('show'); }
 
 /* ---------- 可做素材列表 ---------- */
-function openMaterials() {
+function renderMaterials() {
   const mats = records.filter(r => r.material).sort((a,b) => String(b.date).localeCompare(String(a.date)));
   const box = document.getElementById('materialBox');
-  if (!mats.length) {
-    box.innerHTML = '<div class="empty" style="padding:24px 0">还没有素材记录<br>记录时勾选「这篇可以当发帖素材」,或从「贴文字转记录」生成会自动标记</div>';
-  } else {
-    box.innerHTML = mats.map(r => `
+  box.innerHTML = mats.length ? mats.map(r => `
       <div class="material-item" onclick="openForm('${r.id}')">
         <div class="m-date">${esc(r.date)}</div>
         <div class="m-action">${esc(r.action)}</div>
         ${r.result ? `<div class="m-result">📊 ${esc(r.result)}</div>` : ''}
-      </div>`).join('');
-  }
+      </div>`).join('')
+    : '<div class="empty" style="padding:24px 0">还没有素材记录<br>记录时勾选「这篇可以当发帖素材」,或从「贴文字转记录」生成会自动标记</div>';
+}
+function openMaterials() {
+  renderMaterials();   // 打开前重建,避免保存后数据陈旧
   document.getElementById('materialMask').classList.add('show');
 }
 function closeMaterials() { document.getElementById('materialMask').classList.remove('show'); }
@@ -845,15 +857,19 @@ function runExtract() {
 
 /* ---------- 键盘 ---------- */
 document.addEventListener('keydown', e => {
+  if (e.isComposing || e.keyCode === 229) return;   // 中文输入法选字回车,不触发保存
   if (e.key === 'Escape') { closeForm(); closeText(); closeMaterials(); return; }
   const modal = document.getElementById('modalMask');
   if (modal.classList.contains('show') && (e.ctrlKey || e.metaKey) && e.key === 'Enter') {
     e.preventDefault(); saveRecord();
   }
 });
-// 快记框回车
-document.getElementById('qAction').addEventListener('keydown', e => {
-  if (e.key === 'Enter') { e.preventDefault(); quickSave(); }
+// 快记框回车(工具框同样支持)
+[document.getElementById('qAction'), document.getElementById('qTool')].forEach(el => {
+  el.addEventListener('keydown', e => {
+    if (e.isComposing || e.keyCode === 229) return;   // 中文输入法选字回车不保存
+    if (e.key === 'Enter') { e.preventDefault(); quickSave(); }
+  });
 });
 
 /* ---------- 导出 ---------- */
@@ -862,10 +878,10 @@ function mdLine(r) {
   lines.push(`### ${r.date}`);
   if (r.tool) lines.push(`- **工具**：${r.tool}`);
   lines.push(`- **干了什么**：${r.action}`);
-  if (r.manual !== '' && r.ai !== '') lines.push(`- **耗时**：人工约 ${r.manual} 分钟 → AI ${r.ai} 分钟`);
+  if (r.manual != null && r.manual !== '' && r.ai != null && r.ai !== '') lines.push(`- **耗时**：人工约 ${r.manual} 分钟 → AI ${r.ai} 分钟`);
   if (r.result) lines.push(`- **结果/数据**：${r.result}`);
   if (r.lesson) lines.push(`- **心得/翻车**：${r.lesson}`);
-  if (r.score) lines.push(`- **AI 表现**：${'⭐'.repeat(r.score)}`);
+  if (+r.score > 0) lines.push(`- **AI 表现**：${'⭐'.repeat(Math.min(5, Math.max(0, Math.floor(+r.score))))}`);
   if (r.material) lines.push(`- **素材标记**：✅ 可发帖`);
   lines.push('');
   return lines.join('\n');
@@ -904,17 +920,13 @@ function mergeImport(incoming) {
     keys.add('d:' + r.date + '|' + r.action);
   });
   let added = 0, dup = 0;
-  incoming.forEach(r => {
-    const safe = {
-      ...r,
-      id: String(r.id || '').replace(/[^A-Za-z0-9_:-]/g, '') || 'r' + Date.now() + Math.floor(Math.random()*1000),
-    };
-    const idKey = safe.id ? 'i:' + safe.id : null;
-    const dKey = 'd:' + safe.date + '|' + safe.action;
+  sanitizeRecords(incoming).forEach(r => {
+    const idKey = r.id ? 'i:' + r.id : null;
+    const dKey = 'd:' + r.date + '|' + r.action;
     if ((idKey && keys.has(idKey)) || keys.has(dKey)) { dup++; return; }
     if (idKey) keys.add(idKey);
     keys.add(dKey);
-    records.push(safe);
+    records.push(r);
     added++;
   });
   return { added, dup };
@@ -934,7 +946,7 @@ function importJSON() {
         if (!Array.isArray(data)) throw new Error('格式不对');
         const { added, dup } = mergeImport(data);
         if (dup > 0 && !confirm(`发现 ${dup} 条重复记录。\n确定 = 跳过重复、合并新增（${added} 条）\n取消 = 完全覆盖当前数据`)) {
-          records = data; // 覆盖模式
+          records = sanitizeRecords(data); // 覆盖模式(同样清洗,防脏 id 注入 onclick)
         }
         save();
         toast(`导入完成：新增 ${added} 条` + (dup ? `，跳过重复 ${dup} 条` : '') + ' ✅');
